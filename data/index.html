@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <title>Server-sent events demo</title>
+</head>
+<body>
+  <button>Close the connection</button>
+
+  <ul>
+  </ul>
+
+<script>
+  const button = document.querySelector('button');
+  const authorizationToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6MTY5ODc1NzE5Nn0._wnhuZCbGRzsPkzutMlHpEoUAbkR6cevP2yeVPhDJB0";
+  const evtSource = new EventSource(
+      'http://0.0.0.0:5000/chat/listen',
+      {
+        authorizationHeader: 'Bearer ' + authorizationToken
+      }
+  );
+  console.log(evtSource.withCredentials);
+  console.log(evtSource.readyState);
+  console.log(evtSource.url);
+  const eventList = document.querySelector('ul');
+
+  evtSource.onopen = function() {
+    console.log("Connection to server opened.");
+  };
+
+  evtSource.onmessage = function(e) {
+    const newElement = document.createElement("li");
+
+    newElement.textContent = "message: " + e.data;
+    eventList.appendChild(newElement);
+  };
+
+  evtSource.onerror = function() {
+    console.log("EventSource failed.");
+  };
+
+  button.onclick = function() {
+    console.log('Connection closed');
+    evtSource.close();
+  };
+
+  // evtSource.addEventListener("ping", function(e) {
+  //   var newElement = document.createElement("li");
+  //
+  //   var obj = JSON.parse(e.data);
+  //   newElement.innerHTML = "ping at " + obj.time;
+  //   eventList.appendChild(newElement);
+  // }, false);
+</script>
+</body>
+</html>
