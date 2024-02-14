@@ -13,48 +13,49 @@ url = f"http://{host}:{port}"
 
 
 class ChatApiClient:
-    def __init__(self, base_url: str, http_session: aiohttp.ClientSession):
+    def __init__(self, base_url: str):
         self.url = base_url
-        self.session = http_session
         self.token = None
         self.headers: dict[str, str] = {}
         self.dest: Optional[str] = None
 
     async def login(self, username: str, secret: str) -> None:
-        async with self.session.post(
-            f"{url}/token",
-            data={
-                "grant_type": "password",
-                "username": username,
-                "password": secret,
-                "scope": None,
-                "client_id": None,
-                "client_secret": None,
-            },
-        ) as resp:
-            payload = await resp.json()
-            self.token = payload.get("access_token")
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{url}/token",
+                data={
+                    "grant_type": "password",
+                    "username": username,
+                    "password": secret,
+                    "scope": None,
+                    "client_id": None,
+                    "client_secret": None,
+                },
+            ) as resp:
+                payload = await resp.json()
+                self.token = payload.get("access_token")
 
         self.headers = {"Authorization": f"Bearer {self.token}"}
 
     async def guest_login(self) -> None:
-        async with self.session.post(
-            f"{url}/guest-token",
-        ) as resp:
-            payload = await resp.json()
-            self.token = payload.get("access_token")
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{url}/guest-token",
+            ) as resp:
+                payload = await resp.json()
+                self.token = payload.get("access_token")
 
         self.headers = {"Authorization": f"Bearer {self.token}"}
 
     async def me(self) -> dict:
-        async with self.session.get(f"{url}/chat/me", headers=self.headers) as resp:
-            me = await resp.json()
-            return me
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{url}/chat/me", headers=self.headers) as resp:
+                return await resp.json()
 
     async def chat_session(self) -> dict:
-        async with self.session.post(f"{url}/chat", headers=self.headers) as resp:
-            me = await resp.json()
-            return me
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{url}/chat", headers=self.headers) as resp:
+                return await resp.json()
 
     async def listen(self) -> AsyncGenerator[dict, None]:
         headers = self.headers
@@ -65,12 +66,13 @@ class ChatApiClient:
 
         while True:
             try:
-                async with self.session.get(
-                    f"{url}/chat/listen", headers=headers, raise_for_status=True
-                ) as resp:
-                    async for line in resp.content:
-                        event_payload = json.loads(line)
-                        yield event_payload
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{url}/chat/listen", headers=headers, raise_for_status=True
+                    ) as resp:
+                        async for line in resp.content:
+                            event_payload = json.loads(line)
+                            yield event_payload
             except (
                 asyncio.exceptions.TimeoutError,
                 aiohttp.client_exceptions.ServerDisconnectedError,
@@ -85,13 +87,14 @@ class ChatApiClient:
     async def post(self, dest: Optional[str], message: str) -> None:
         try:
             assert dest is not None
-            async with self.session.post(
-                f"{url}/chat/{dest}/post",
-                headers=self.headers,
-                json={"content": message},
-                raise_for_status=True,
-            ) as resp:
-                ...
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{url}/chat/{dest}/post",
+                    headers=self.headers,
+                    json={"content": message},
+                    raise_for_status=True,
+                ) as resp:
+                    ...
         except (
             asyncio.exceptions.TimeoutError,
             aiohttp.client_exceptions.ServerDisconnectedError,
@@ -133,15 +136,14 @@ async def post_loop(client: ChatApiClient) -> None:
 
 
 async def run() -> None:
-    async with aiohttp.ClientSession() as session:
-        client = ChatApiClient(url, session)
-        if sys.argv[1] == "guest":
-            await client.guest_login()
-        else:
-            await client.login(sys.argv[1], sys.argv[1])
-        t = asyncio.create_task(listen_loop(client))
-        p = asyncio.create_task(post_loop(client))
-        await asyncio.gather(t, p)
+    client = ChatApiClient(url)
+    if sys.argv[1] == "guest":
+        await client.guest_login()
+    else:
+        await client.login(sys.argv[1], sys.argv[1])
+    t = asyncio.create_task(listen_loop(client))
+    p = asyncio.create_task(post_loop(client))
+    await asyncio.gather(t, p)
 
 
 def main() -> None:
