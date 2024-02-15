@@ -31,6 +31,10 @@ class SessionMessage(BaseModel):
     content: str
 
 
+class SessionInvite(BaseModel):
+    user_id: UserId
+
+
 class Message(BaseModel):
     id: MessageId = Field(default_factory=shortuuid)
     session: SessionId
@@ -57,6 +61,9 @@ class SessionManager:
 
     def get_session(self, session_id: SessionId) -> ChatSession:
         return self._sessions.setdefault(session_id, ChatSession(id=session_id))
+
+    def get_user_sessions(self, user_id: UserId) -> list[ChatSession]:
+        return [sess for sess in self._sessions.values() if user_id in sess.members]
 
     async def push_message(self, message: Message) -> None:
         session = self.get_session(message.session)
@@ -224,8 +231,40 @@ async def delete_chat(
 
 
 @app.get("/chat/me")
-async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]) -> User:
+async def get_chat_me(current_user: Annotated[User, Depends(get_current_active_user)]) -> User:
     return current_user
+
+
+@app.get("/chat/me/sessions")
+async def get_chat_me_session(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    sessions: Annotated[SessionManager, Depends(get_session_manager)],
+) -> list[ChatSession]:
+    return sessions.get_user_sessions(current_user.id)
+
+
+@app.post("/chat/{sid}/invite")
+async def chat_invite(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    sessions: Annotated[SessionManager, Depends(get_session_manager)],
+    users: Annotated[UserManager, Depends(get_user_db)],
+    invitee: SessionInvite,
+    sid: SessionId,
+) -> Message:
+    if current_user.id not in sessions.get_session(sid).members:
+        raise HTTPException(status_code=403, detail="Session not available to user")
+
+    user = users.get_user(invitee.user_id)
+
+    session = sessions.get_session(sid)
+    session.members.add(user.id)
+    user_message = Message(
+        session=sid,
+        origin=current_user,
+        message=f"{user.username} was invited to the chat by {current_user.username}.",
+    )
+    await sessions.push_message(user_message)
+    return user_message
 
 
 @app.post("/chat/{sid}/post")

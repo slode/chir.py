@@ -6,6 +6,7 @@ import sys
 
 from typing import AsyncGenerator, Optional
 
+from chirpy.types import UserId, SessionId
 
 host = "localhost"
 port = "8000"
@@ -47,15 +48,81 @@ class ChatApiClient:
 
         self.headers = {"Authorization": f"Bearer {self.token}"}
 
+    async def invite(self, dest: SessionId, user_id: UserId) -> None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{url}/chat/{dest}/invite",
+                    headers=self.headers,
+                    json={"user_id": user_id},
+                    raise_for_status=True,
+                ) as resp:
+                    return await resp.json()
+        except (
+            asyncio.exceptions.TimeoutError,
+            aiohttp.client_exceptions.ServerDisconnectedError,
+            aiohttp.client_exceptions.ClientConnectorError,
+            aiohttp.client_exceptions.ClientResponseError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+        ) as e:
+            print(e)
+
     async def me(self) -> dict:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{url}/chat/me", headers=self.headers) as resp:
-                return await resp.json()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{url}/chat/me", headers=self.headers) as resp:
+                    return await resp.json()
+        except (
+            asyncio.exceptions.TimeoutError,
+            aiohttp.client_exceptions.ServerDisconnectedError,
+            aiohttp.client_exceptions.ClientConnectorError,
+            aiohttp.client_exceptions.ClientResponseError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+        ) as e:
+            print(e)
+
+    async def sessions(self) -> dict:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{url}/chat/me/sessions", headers=self.headers) as resp:
+                    return await resp.json()
+        except (
+            asyncio.exceptions.TimeoutError,
+            aiohttp.client_exceptions.ServerDisconnectedError,
+            aiohttp.client_exceptions.ClientConnectorError,
+            aiohttp.client_exceptions.ClientResponseError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+        ) as e:
+            print(e)
 
     async def chat_session(self) -> dict:
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{url}/chat", headers=self.headers) as resp:
                 return await resp.json()
+
+    async def post(self, dest: SessionId, message: str) -> None:
+        try:
+            assert dest is not None
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{url}/chat/{dest}/post",
+                    headers=self.headers,
+                    json={"content": message},
+                    raise_for_status=True,
+                ) as resp:
+                    ...
+        except (
+            asyncio.exceptions.TimeoutError,
+            aiohttp.client_exceptions.ServerDisconnectedError,
+            aiohttp.client_exceptions.ClientConnectorError,
+            aiohttp.client_exceptions.ClientResponseError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+        ) as e:
+            print(e)
 
     async def listen(self) -> AsyncGenerator[dict, None]:
         headers = self.headers
@@ -83,27 +150,6 @@ class ChatApiClient:
             ) as e:
                 print("Connection down. Retrying!")
                 await asyncio.sleep(1.0)
-
-    async def post(self, dest: Optional[str], message: str) -> None:
-        try:
-            assert dest is not None
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{url}/chat/{dest}/post",
-                    headers=self.headers,
-                    json={"content": message},
-                    raise_for_status=True,
-                ) as resp:
-                    ...
-        except (
-            asyncio.exceptions.TimeoutError,
-            aiohttp.client_exceptions.ServerDisconnectedError,
-            aiohttp.client_exceptions.ClientConnectorError,
-            aiohttp.client_exceptions.ClientResponseError,
-            ConnectionResetError,
-            ConnectionAbortedError,
-        ) as e:
-            print(e)
 
 
 async def listen_loop(client: ChatApiClient) -> None:

@@ -1,18 +1,11 @@
 import asyncio
-import aiohttp
 import logging
 
-try:
-    import httpx
-except ImportError:
-    raise ImportError("Please install httpx with 'pip install httpx' ")
-
-
-from textual import work, log
+from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll, Container, Horizontal
+from textual.containers import VerticalScroll
 from textual.widget import Widget
-from textual.widgets import Input, Label, Static, Welcome, Header, Footer
+from textual.widgets import Input, Label, Header, Pretty
 from textual.logging import TextualHandler
 
 from chirpy import client
@@ -22,7 +15,7 @@ logging.basicConfig(
     handlers=[TextualHandler()],
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class MessageBox(Widget, can_focus=True):  # type: ignore[call-arg]
@@ -39,10 +32,6 @@ class MessageBox(Widget, can_focus=True):  # type: ignore[call-arg]
         label = Label(self.text, classes=f"message {self.role}")
         label.border_title = self.title
         yield label
-
-
-class FocusableContainer(Container, can_focus=True):  # type: ignore[call-arg]
-    """Focusable container widget."""
 
 
 class ChirpyApp(App):
@@ -71,15 +60,17 @@ class ChirpyApp(App):
         box = self.query_one("#results-container")
         while True:
             try:
-                chat = await self.client.chat_session()
-                self.client.dest = chat["id"]
+                self.chat = await self.client.chat_session()
+                self.client.dest = self.chat["id"]
                 async for event in self.client.listen():
                     session = event["session"]
                     source_id = event["origin"]["id"]
                     source = event["origin"]["username"]
                     message = event["message"]
                     role = "question" if source_id == user["id"] else "answer"
-                    box.mount(MessageBox(text=message.strip(), title=source, role=role))
+                    box.mount(
+                        MessageBox(text=message.strip(), title=f"{source}@{session}", role=role)
+                    )
                     box.scroll_end()
                     self.refresh()
             except Exception as e:
@@ -88,14 +79,54 @@ class ChirpyApp(App):
     async def on_input_submitted(self) -> None:
         """A coroutine to handle a text changed message."""
         value = self.query_one(Input).value
-        self.lookup_word(value)
-        self.query_one(Input).clear()
+        if not value:
+            return
+
+        self.process_message(value)
 
     @work(exclusive=True)
-    async def lookup_word(self, word: str) -> None:
+    async def process_message(self, word: str) -> None:
         """Looks up a word."""
-        if self.client is not None:
+        if self.client is None:
+            return
+
+        if word.startswith("/me"):
+            me = await self.client.me()
+            box = self.query_one("#results-container")
+            box.mount(Pretty(me, name="/me", classes="message info"))
+            box.scroll_end()
+        elif word.startswith("/new "):
+            await self.client.guest_login()
+        elif word.startswith("/logon "):
+            cmd, user, password = word.split(" ")
+            await self.client.login(user, password)
+        elif word.startswith("/invite "):
+            await self.client.invite(self.client.dest, word[7:].strip())
+        elif word.startswith("/sessions"):
+            sessions = await self.client.sessions()
+            box = self.query_one("#results-container")
+            box.mount(Pretty(sessions, name="/sessions", classes="message info"))
+            box.scroll_end()
+        elif word.startswith("/session "):
+            if word[10:]:
+                self.client.dest = word[9:].strip()
+            else:
+                self.client.dest = self.chat["id"]
+            box = self.query_one("#results-container")
+            box.mount(
+                MessageBox(
+                    text=f"Now writing to session {self.client.dest}",
+                    title="/sessions",
+                    role="info",
+                )
+            )
+            box.scroll_end()
+        elif word.startswith("/"):
+            return
+        else:
             await self.client.post(self.client.dest, word)
+
+        self.query_one(Input).clear()
 
 
 if __name__ == "__main__":
