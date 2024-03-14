@@ -6,11 +6,12 @@ import sys
 
 from typing import AsyncGenerator, Optional
 
+from chirpy import config
 from chirpy.types import UserId, SessionId
 
 host = "localhost"
-port = "8000"
-url = f"http://{host}:{port}"
+host = "192.168.10.97"
+url = f"http://{host}:{config.port}"
 
 
 class ChatApiClient:

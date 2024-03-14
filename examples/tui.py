@@ -42,6 +42,7 @@ class ChirpyApp(App):
         self.client = client.ChatApiClient(client.url)
         self.current_session = None
         self.sessions = {}
+        self.listen_task = None
 
     def get_current_session(self):
         tabs = self.query_one("#session_tabs")
@@ -62,7 +63,6 @@ class ChirpyApp(App):
         # Give the input focus, so we can start typing straight away
         self.query_one(Input).focus()
         await self.log_in()
-        self.t = asyncio.create_task(self.listen())
 
     async def add_session(self, session_id: str):
         try:
@@ -73,13 +73,30 @@ class ChirpyApp(App):
         tabs = self.query_one("#session_tabs").add_tab(Tab(session_id, id=f"tab-{session_id}"))
         self.refresh()
 
-    async def join_session(self):
-        session = await self.client.chat_session()
-        await self.add_session(session["id"])
+    async def create_session(self):
+        await self.client.chat_session()
+        await self.refresh_sessions()
 
-    async def log_in(self):
-        await self.client.guest_login()
+    async def log_in(self, user: str | None = None, password: str | None = None):
+        if user is None:
+            await self.client.guest_login()
+        else:
+            await self.client.login(user, password)
+
         self.user = await self.client.me()
+
+        if self.listen_task is not None:
+            self.listen_task.cancel()
+            await self.listen_task
+
+        self.listen_task = asyncio.create_task(self.listen())
+
+        await self.refresh_sessions()
+
+    async def refresh_sessions(self) -> list[dict]:
+        sessions = await self.client.sessions()
+        for session in sessions:
+            await self.add_session(session["id"])
 
     async def listen(self):
         box = self.query_one("#results-container")
@@ -98,6 +115,8 @@ class ChirpyApp(App):
                     )
                     box.scroll_end()
                     self.refresh()
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 self.log(e)
                 await asyncio.sleep(3)
@@ -122,17 +141,24 @@ class ChirpyApp(App):
             box.mount(Pretty(me, name="/me", classes="message info"))
             box.scroll_end()
         elif word.startswith("/new"):
-            await self.join_session()
+            await self.create_session()
         elif word.startswith("/logon"):
             cmd, user, password = word.split(" ")
-            await self.client.login(user, password)
+            await self.log_in(user, password)
         elif word.startswith("/invite"):
             cmd, user = word.split(" ")
             await self.client.invite(self.get_current_session(), user.strip())
         elif word.startswith("/sessions"):
             sessions = await self.client.sessions()
+            for session in sessions:
+                await self.add_session(session["id"])
             box = self.query_one("#results-container")
             box.mount(Pretty(sessions, name="/sessions", classes="message info"))
+            box.scroll_end()
+        elif word.startswith("/token"):
+            token = self.client.token
+            box = self.query_one("#results-container")
+            box.mount(Pretty(token, name="/token", classes="message info"))
             box.scroll_end()
         elif word.startswith("/"):
             return

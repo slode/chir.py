@@ -1,28 +1,22 @@
 import asyncio
-import base64
-import json
-import jwt
 import logging
 import uuid
 
 
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta
-from typing import Annotated, Union, Any, AsyncGenerator, Optional
+from typing import Annotated, Union, AsyncGenerator
 from weakref import WeakSet
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.exceptions import RequestValidationError
+from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel, Field
 
-from chirpy.users import User, DBUser, UserManager
+from chirpy.users import User, UserManager
 from chirpy.types import UserId, MessageId, SessionId, shortuuid
-from chirpy import auth
+from chirpy import auth, config
 
 logger = logging.getLogger()
 
@@ -287,7 +281,7 @@ async def chat_post(
 
 
 @app.get("/chat/listen", response_model=Message)
-async def listen_for_messages(
+async def stream_listen_for_messages(
     current_user: Annotated[User, Depends(get_current_active_user)],
     sessions: Annotated[SessionManager, Depends(get_session_manager)],
 ) -> StreamingResponse:
@@ -304,13 +298,30 @@ async def listen_for_messages(
     return StreamingResponse(wait_for_message(current_user))
 
 
+@app.get("/chat/sse", response_model=Message)
+async def sse_listen_for_messages(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    sessions: Annotated[SessionManager, Depends(get_session_manager)],
+) -> StreamingResponse:
+    async def wait_for_message(user: User) -> AsyncGenerator[Union[str, bytes], None]:
+        try:
+            queue = sessions.get_channel(current_user.id)
+            while True:
+                message: Message = await queue.get()
+                yield message.model_dump_json()
+        except asyncio.CancelledError:
+            ...
+
+    return EventSourceResponse(wait_for_message(current_user))
+
+
 def main() -> None:
     import uvicorn
 
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8000,
+        host=config.host,
+        port=config.port,
     )
 
 

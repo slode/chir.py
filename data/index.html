@@ -5,52 +5,43 @@
    <title>Server-sent events demo</title>
 </head>
 <body>
-  <button>Close the connection</button>
-
-  <ul>
-  </ul>
+  <ul id="messages"></ul>
 
 <script>
-  const button = document.querySelector('button');
-  const authorizationToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6MTY5ODc1NzE5Nn0._wnhuZCbGRzsPkzutMlHpEoUAbkR6cevP2yeVPhDJB0";
-  const evtSource = new EventSource(
-      'http://0.0.0.0:5000/chat/listen',
-      {
-        authorizationHeader: 'Bearer ' + authorizationToken
+  const message_list = document.querySelector('#messages');
+  const authorizationToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdhOTJjMjAyIiwic3ViIjoiYWxpY2UiLCJleHAiOjE3MTA0MzM1ODMsImlhdCI6MTcxMDQxNTU4M30.BuXBT2kQ4B-wgTACQJu_GRUrJrfg00yDcxCL84vd4dQ"
+  const options = {
+      headers: {
+        "Authorization": "Bearer " + authorizationToken
+      },
+  }
+  fetch("http://0.0.0.0:8099/chat/sse?", options)
+    .then((response) => response.body)
+    .then(async (body) => {
+      const reader = body?.pipeThrough(
+        new TextDecoderStream()
+      ).getReader();
+
+      if (!reader) {
+        return;
       }
-  );
-  console.log(evtSource.withCredentials);
-  console.log(evtSource.readyState);
-  console.log(evtSource.url);
-  const eventList = document.querySelector('ul');
 
-  evtSource.onopen = function() {
-    console.log("Connection to server opened.");
-  };
+      while (true) {
+        const res = await reader.read();
+        if (res?.done) break;
+        if (res?.value == null) continue; 
+        if (res.value.startsWith(": ping"))
+          continue;
+        if (!res.value.startsWith("data: "))
+          continue;
 
-  evtSource.onmessage = function(e) {
-    const newElement = document.createElement("li");
-
-    newElement.textContent = "message: " + e.data;
-    eventList.appendChild(newElement);
-  };
-
-  evtSource.onerror = function() {
-    console.log("EventSource failed.");
-  };
-
-  button.onclick = function() {
-    console.log('Connection closed');
-    evtSource.close();
-  };
-
-  // evtSource.addEventListener("ping", function(e) {
-  //   var newElement = document.createElement("li");
-  //
-  //   var obj = JSON.parse(e.data);
-  //   newElement.innerHTML = "ping at " + obj.time;
-  //   eventList.appendChild(newElement);
-  // }, false);
+        chat_event = JSON.parse(res.value.slice(6))
+        console.log(chat_event)
+        const list_item = document.createElement("li");
+        list_item.textContent=`Got message "${chat_event.message}" from ${chat_event.origin.username}`;
+        message_list.appendChild(list_item);
+      }
+    }).catch(console.error);
 </script>
 </body>
 </html>
