@@ -3,10 +3,18 @@
 <head>
    <meta charset="UTF-8">
    <title>Server-sent events demo</title>
+   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.4.1/dist/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+
 </head>
 <body>
-  <ul id="messages"></ul>
-
+  <div class="container-fluid">
+    <div class="row flex-xl-nowrap">
+      <div class="col-div-9 bd-example">
+        <h1>Message stream</h1>
+        <ul id="messages"></ul>
+      </div>
+    </div>
+  </div>
 <script>
   const message_list = document.querySelector('#messages');
   const urlParams = new URLSearchParams(window.location.search);
@@ -39,6 +47,7 @@
         chat_event = JSON.parse(res.value.slice(6))
         console.log(chat_event)
         const list_item = document.createElement("li");
+        list_item.className = "alert alert-info"
         list_item.textContent=`Got message "${chat_event.message}" from ${chat_event.origin.username} on session ${chat_event.session}`;
         message_list.appendChild(list_item);
       }

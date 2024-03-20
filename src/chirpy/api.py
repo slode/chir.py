@@ -320,6 +320,7 @@ async def stream_user_messages(
 async def format_user_messages(
     user: User, sessions: SessionManager
 ) -> AsyncGenerator[Union[str, bytes], None]:
+    """Format the stream to comply with a StreamReponse"""
     async for message in stream_user_messages(user, sessions):
         yield message
         yield "\n"
