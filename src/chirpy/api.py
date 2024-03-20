@@ -214,6 +214,13 @@ async def create_chat(
     session.members.add(users.get_user_by_name("alice").id)
     session.members.add(users.get_user_by_name("bob").id)
     session.members.add(users.get_user_by_name("charlie").id)
+
+    user_message = Message(
+        session=session.id,
+        origin=current_user,
+        message=f"{current_user.username} created a new session {session.id}",
+    )
+    await sessions.push_message(user_message)
     return session
 
 
@@ -280,22 +287,50 @@ async def chat_post(
     return user_message
 
 
+async def stream_user_messages(
+    user: User, sessions: SessionManager
+) -> AsyncGenerator[Union[str, bytes], None]:
+    """Stream messages from all subscribed queues"""
+    try:
+        for session in sessions.get_user_sessions(user.id):
+            user_message = Message(
+                session=session.id,
+                origin=user,
+                message=f"{user.username} is listening on session {session.id}",
+            )
+            await sessions.push_message(user_message)
+
+        queue = sessions.get_channel(user.id)
+        while True:
+            message: Message = await queue.get()
+            yield message.model_dump_json()
+            # yield "\n"
+    except asyncio.CancelledError:
+        ...
+    finally:
+        for session in sessions.get_user_sessions(user.id):
+            user_message = Message(
+                session=session.id,
+                origin=user,
+                message=f"{user.username} is not listening on session {session.id}",
+            )
+            await sessions.push_message(user_message)
+
+
+async def format_user_messages(
+    user: User, sessions: SessionManager
+) -> AsyncGenerator[Union[str, bytes], None]:
+    async for message in stream_user_messages(user, sessions):
+        yield message
+        yield "\n"
+
+
 @app.get("/chat/listen", response_model=Message)
 async def stream_listen_for_messages(
     current_user: Annotated[User, Depends(get_current_active_user)],
     sessions: Annotated[SessionManager, Depends(get_session_manager)],
 ) -> StreamingResponse:
-    async def wait_for_message(user: User) -> AsyncGenerator[Union[str, bytes], None]:
-        try:
-            queue = sessions.get_channel(current_user.id)
-            while True:
-                message: Message = await queue.get()
-                yield message.model_dump_json()
-                yield "\n"
-        except asyncio.CancelledError:
-            ...
-
-    return StreamingResponse(wait_for_message(current_user))
+    return StreamingResponse(format_user_messages(current_user, sessions))
 
 
 @app.get("/chat/sse", response_model=Message)
@@ -303,16 +338,7 @@ async def sse_listen_for_messages(
     current_user: Annotated[User, Depends(get_current_active_user)],
     sessions: Annotated[SessionManager, Depends(get_session_manager)],
 ) -> StreamingResponse:
-    async def wait_for_message(user: User) -> AsyncGenerator[Union[str, bytes], None]:
-        try:
-            queue = sessions.get_channel(current_user.id)
-            while True:
-                message: Message = await queue.get()
-                yield message.model_dump_json()
-        except asyncio.CancelledError:
-            ...
-
-    return EventSourceResponse(wait_for_message(current_user))
+    return EventSourceResponse(stream_user_messages(current_user, sessions))
 
 
 def main() -> None:

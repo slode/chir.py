@@ -11,8 +11,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000000
 
 
-class TokenValidationException(Exception):
-    ...
+class TokenValidationException(Exception): ...
 
 
 def decode_token(token: str) -> dict[str, Any]:

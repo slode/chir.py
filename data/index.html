@@ -9,7 +9,8 @@
 
 <script>
   const message_list = document.querySelector('#messages');
-  const authorizationToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdhOTJjMjAyIiwic3ViIjoiYWxpY2UiLCJleHAiOjE3MTA0MzM1ODMsImlhdCI6MTcxMDQxNTU4M30.BuXBT2kQ4B-wgTACQJu_GRUrJrfg00yDcxCL84vd4dQ"
+  const urlParams = new URLSearchParams(window.location.search);
+  const authorizationToken = urlParams.get('token');
   const options = {
       headers: {
         "Authorization": "Bearer " + authorizationToken
@@ -38,7 +39,7 @@
         chat_event = JSON.parse(res.value.slice(6))
         console.log(chat_event)
         const list_item = document.createElement("li");
-        list_item.textContent=`Got message "${chat_event.message}" from ${chat_event.origin.username}`;
+        list_item.textContent=`Got message "${chat_event.message}" from ${chat_event.origin.username} on session ${chat_event.session}`;
         message_list.appendChild(list_item);
       }
     }).catch(console.error);
